@@ -4,19 +4,36 @@ export default async function handler(req, res) {
   }
 
   try {
-    const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(req.body),
-    });
+    const { system, messages } = req.body;
+
+    const contents = (messages || []).map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) }],
+    }));
+
+    const geminiBody = {
+      contents,
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+    };
+
+    const model = "gemini-2.5-flash";
+    const upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(geminiBody),
+      }
+    );
 
     const data = await upstream.json();
-    res.status(upstream.status).json(data);
+
+    const text =
+      data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("\n") ||
+      "";
+
+    res.status(upstream.status).json({ content: [{ type: "text", text }] });
   } catch (err) {
     res.status(500).json({ error: "proxy_error", message: err.message });
   }
-}
+  }
