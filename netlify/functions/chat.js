@@ -1,10 +1,10 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+export const handler = async (event) => {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
   }
 
   try {
-    const { system, messages } = req.body;
+    const { system, messages } = JSON.parse(event.body);
 
     const contents = (messages || []).map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
@@ -32,8 +32,15 @@ export default async function handler(req, res) {
       data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("\n") ||
       "";
 
-    res.status(upstream.status).json({ content: [{ type: "text", text }] });
+    return {
+      statusCode: upstream.status,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: [{ type: "text", text }] }),
+    };
   } catch (err) {
-    res.status(500).json({ error: "proxy_error", message: err.message });
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "proxy_error", message: err.message }),
+    };
   }
-      }
+};
